@@ -3807,13 +3807,21 @@ case 'demoteall': {
     if (!m.isGroup) return reply("ɢʀᴏᴜᴘ ᴄᴏᴍᴍᴀɴᴅ ᴏɴʟʏ.")
     if (!isCreator) return reply("ᴏᴡɴᴇʀ ᴏɴʟʏ.")
 
-    const metadata = await bad.groupMetadata(m.chat)
-    const botJid = bad.user.id // bot ka full JID
-
-    // Saare admins filter karo, sirf bot ko chor kar
-    let adminsToDemote = metadata.participants.filter(
-        (u) => u.admin && u.id !== botJid
-    )
+        const metadata = await bad.groupMetadata(m.chat)
+    // WhatsApp may return the bot as a device-suffixed JID or LID, so a
+    // plain string comparison can accidentally include the bot itself.
+    const botJid = bad.decodeJid ? bad.decodeJid(bad.user.id) : bad.user.id
+    const botNumber = normalizeJid(botJid)
+    // Demote regular admins only; exclude the bot using normalized JID checks.
+    // The group owner/superadmin is also left untouched because WhatsApp does
+    // not allow that account to be demoted through this action.
+    let adminsToDemote = metadata.participants.filter((u) => {
+        const isRegularAdmin = u.admin === 'admin'
+        const isBot = normalizeJid(u.id) === botNumber ||
+            isSameUser(u.id, botJid) ||
+            areJidsSameUser(u.id, botJid)
+        return isRegularAdmin && !isBot
+    })
 
     if (adminsToDemote.length === 0) {
         return reply("❌ Bot ke alawa koi aur admin nahi hai.")
