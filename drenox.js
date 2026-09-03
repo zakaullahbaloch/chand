@@ -12984,6 +12984,49 @@ module.exports.setupEventListeners = function(bad, store) {
             
             const welcomeImage = "https://files.catbox.moe/9slbo0.jpg";
             const goodbyeImage = "https://files.catbox.moe/9slbo0.jpg";
+
+            // Reliable join/leave notices. The legacy branch below depended on
+            // a remote image request and could fail before sending any notice.
+            if (action === 'add' || action === 'remove') {
+                const settingKey = action === 'add' ? 'welcome' : 'goodbye'
+                if (getSetting(id, settingKey, true) !== true) return
+
+                for (const participant of participants) {
+                let groupName = 'the group'
+                let membersCount = null
+                try {
+                    const metadata = await bad.groupMetadata(id)
+                    groupName = metadata.subject || groupName
+                    membersCount = metadata.participants?.length || null
+                } catch (metadataError) {
+                    console.error(`Group metadata error (${settingKey}):`, metadataError.message)
+                }
+
+                const cleanParticipant = String(participant || '').split('@')[0]
+                const randomMessage = action === 'add'
+                    ? welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)]
+                    : goodbyeMessages[Math.floor(Math.random() * goodbyeMessages.length)]
+                const caption = action === 'add'
+                    ? `👋 *Welcome @${cleanParticipant}!*\n\n📛 Group: ${groupName}\n👥 Members: ${membersCount ?? 'N/A'}\n\n📢 ${randomMessage}`
+                    : `👋 *Goodbye @${cleanParticipant}!*\n\n📛 Group: ${groupName}\n👥 Members now: ${membersCount ?? 'N/A'}\n\n📢 ${randomMessage}`
+                const imageUrl = action === 'add' ? welcomeImage : goodbyeImage
+
+                try {
+                    await bad.sendMessage(id, {
+                        image: { url: imageUrl },
+                        caption,
+                        mentions: [participant]
+                    })
+                } catch (imageError) {
+                    console.error(`${settingKey} image send failed, using text fallback:`, imageError.message)
+                    await bad.sendMessage(id, {
+                        text: caption,
+                        mentions: [participant]
+                    })
+                }
+                }
+                return
+            }
             
             for (let participant of participants) {
                 if (action === 'add') {
