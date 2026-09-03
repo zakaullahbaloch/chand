@@ -6378,70 +6378,78 @@ case "ytmp4": {
 }
 break;
 // ═══════════════════════════════════════════════════════════
-// PLAY - YouTube Audio Search & Download
-// ══════════════════════════════════════════════════════════
-   
+// PLAY - Music API Search & Download
+// ═══════════════════════════════════════════════════════════
 case 'play':
 case 'song': {
-  if (!text) return reply(`🎵 Provide a song name`)
+  if (!text) {
+    return reply(`_*Please enter a song name, e.g. ${prefix}play Teri Ishq Main*_`)
+  }
+
+  const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)]
+  const heartEmojis = ['❤️', '🧡', '💛', '🩷', '🤍', '♥️', '🩶']
+  const musicEmojis = ['🎧', '🎬']
+  const flowerEmojis = ['🌼', '🌸', '🌻', '🌺', '💐', '🍁']
+  const truncateTitle = (title, wordLimit = 35) => {
+    const safeTitle = String(title || 'Unknown title').trim()
+    const words = safeTitle.split(/\s+/)
+    return words.length <= wordLimit ? safeTitle : `${words.slice(0, wordLimit).join(' ')}......`
+  }
 
   try {
     await bad.sendMessage(m.chat, { react: { text: '🎶', key: m.key } })
+    const api = `https://api.sayan-nexuswork.workers.dev/music?query=${encodeURIComponent(text)}`
+    const response = await axios.get(api, { timeout: 30000 })
+    const data = response.data || {}
 
-    const yts = require('yt-search')
-    const axios = require('axios')
-
-    // 1️⃣ YouTube Search
-    const search = await yts(text)
-    if (!search.videos.length) {
+    if (data.status !== 'success' || !data.url) {
       await bad.sendMessage(m.chat, { react: { text: '❌', key: m.key } })
-      return reply('❌ No results found')
+      return reply('_*No results found for your query. Try another song.*_')
     }
 
-    const video = search.videos[0]
+    const randHeart = pickRandom(heartEmojis)
+    const randMusic = pickRandom(musicEmojis)
+    const randFlower = pickRandom(flowerEmojis)
+    const shortTitle = truncateTitle(data.title)
+    const caption = `☘️ Title: ${shortTitle}\n\n*⧉ ⏱️ Duration: ${data.duration || 'N/A'}*\n\n*⧉ 🎭 Views: ${data.views || 'N/A'}*\n\n*⧉ 📺 Channel: ${data.channel || 'N/A'}*\n\n*⧉ 🎙️ Creator: FMS_CHAND*\n\n*Shahzu says: Use headphones for the best vibe..!! ${randHeart}${randMusic}${randFlower}*`
 
-    // 2️⃣ API Call
-    const api = `https://api.ootaizumi.web.id/downloader/youtube`
-    const { data } = await axios.get(api, {
-      params: {
-        url: video.url,
-        format: 'mp3'
-      }
+    if (data.thumbnail) {
+      await bad.sendMessage(m.chat, {
+        image: { url: data.thumbnail },
+        caption
+      }, { quoted: m })
+    } else {
+      await reply(caption)
+    }
+
+    const audioResponse = await axios.get(data.url, {
+      responseType: 'arraybuffer',
+      timeout: 60000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/149.0.0.0 Safari/537.36',
+        Referer: 'https://m.youtube.com/'
+      },
+      maxContentLength: 50 * 1024 * 1024,
+      maxBodyLength: 50 * 1024 * 1024
     })
 
-    if (!data.status || !data.result?.download) {
-      throw new Error('Download failed')
+    const buffer = Buffer.from(audioResponse.data)
+    if (!buffer.length) {
+      throw new Error('Audio buffer is empty')
     }
 
-    const result = data.result
-
-    // 3️⃣ Send Audio
-    await bad.sendMessage(
-      m.chat,
-      {
-        audio: { url: result.download },
-        mimetype: 'audio/mpeg',
-        fileName: `${result.title}.mp3`,
-        contextInfo: {
-          externalAdReply: {
-            title: result.title,
-            body: result.author?.channelTitle || 'YouTube Audio',
-            thumbnailUrl: result.thumbnail,
-            sourceUrl: video.url,
-            mediaType: 1,
-            renderLargerThumbnail: true
-          }
-        }
-      },
-      { quoted: m }
-    )
+    await bad.sendMessage(m.chat, {
+      audio: buffer,
+      mimetype: 'audio/mpeg',
+      ptt: false,
+      fileName: `${shortTitle.replace(/[\\/:*?"<>|]/g, '_')}-shahzuXstudio.mp3`
+    }, { quoted: m })
 
     await bad.sendMessage(m.chat, { react: { text: '✅', key: m.key } })
-
-  } catch (e) {
-    console.error(e)
-    await bad.sendMessage(m.chat, { react: { text: '❌', key: m.key } })
-    reply('⚠️ Error while processing the request')
+  } catch (error) {
+    console.error('Play command error:', error.message)
+    await bad.sendMessage(m.chat, { react: { text: '❌', key: m.key } }).catch(() => {})
+    return reply('_*Server not responding right now. Please try again later.*_')
   }
 }
 break
