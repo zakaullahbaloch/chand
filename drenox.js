@@ -654,7 +654,7 @@ function makeResponseFlirty(response, userMessage) {
 // ═══════════════════════════════════════════════════════════
 // MAIN MESSAGE HANDLER FUNCTION
 // ═══════════════════════════════════════════════════════════
-async function handleMessage(bad, m, chatUpdate, store) {
+async function commandHandler(bad, m, chatUpdate, store) {
   try {
     if (!m || !m.key) return
     
@@ -12720,43 +12720,44 @@ module.exports = async function handleMessage(bad, mek, chatUpdate, store) {
                 } catch (err) {}
             }
             
-            if (fromMe) continue
+                        // ==================== EXTRACT MESSAGE BODY ====================
+            const messageTypes = msg.message || {}
+            const chatId = msg.key.remoteJid
+            const body = messageTypes.conversation ||
+                         messageTypes.extendedTextMessage?.text ||
+                         messageTypes.imageMessage?.caption ||
+                         messageTypes.videoMessage?.caption ||
+                         messageTypes.audioMessage?.caption ||
+                         messageTypes.documentMessage?.caption ||
+                         ''
+            // Antilink applies to incoming group messages, including self mode.
+            // The bot's own messages are excluded to prevent deleting its output.
+            if (!fromMe && chatId?.endsWith('@g.us')) {
+                try {
+                    const metadata = await bad.groupMetadata(chatId)
+                    const botId = bad.user.id.split(':')[0] + '@s.whatsapp.net'
+                    const botParticipant = metadata.participants.find(p =>
+                        p.id === botId || areJidsSameUser(p.id, botId)
+                    )
+                    if (botParticipant?.admin) {
+                        const antilink = getSetting(chatId, 'antilink')
+                        if (antilink && /(https?:\/\/|www\.|chat\.whatsapp\.com)/i.test(body)) {
+                            await bad.sendMessage(chatId, { delete: msg.key })
+                        }
+                    }
+                } catch (antilinkError) {
+                    console.error('Antilink error:', antilinkError.message)
+                }
+            }
             
-// ==================== EXTRACT MESSAGE BODY ====================
-// group only
-if (!chatId.endsWith('@g.us')) return
-
-// ignore bot messages
-if (msg.key.fromMe) return
-
-// body extract
-const messageTypes = msg.message
-
-const chatId = msg.key.remoteJid
-let body = messageTypes?.conversation || 
-           messageTypes?.extendedTextMessage?.text || 
-           messageTypes?.imageMessage?.caption || 
-           messageTypes?.videoMessage?.caption || 
-           messageTypes?.audioMessage?.caption ||
-           messageTypes?.documentMessage?.caption ||
-           ''
-
-// bot admin check
-const metadata = await bad.groupMetadata(chatId)
-const botId = bad.user.id.split(':')[0] + '@s.whatsapp.net'
-const isBotAdmin = metadata.participants.find(p => p.id === botId)?.admin
-if (!isBotAdmin) return
-
-// antilink setting
-const antilink = getSetting(chatId, "antilink") || "delete"
-
-// link detection
-if (antilink && /(https?:\/\/|www\.|chat\.whatsapp\.com)/i.test(body)) {
-  if (antilink === "delete") {
-    await bad.sendMessage(chatId, { delete: msg.key })
-  }
-}
-            
+            // Dispatch every message to the actual command switch. The inner
+            // handler applies self-mode ownership checks for commands.
+            try {
+                const normalizedMessage = smsg(bad, msg, store)
+                await commandHandler(bad, normalizedMessage, { ...chatUpdate, messages: [msg] }, store)
+            } catch (commandError) {
+                console.error('Command dispatch error:', commandError.message)
+            }
             // ==================== AUTO PRESENCE ====================
             const lastPresence = activePresence.get(chatId)
             if (!lastPresence || Date.now() - lastPresence > 3000) {
@@ -13298,6 +13299,7 @@ module.exports.setupEventListeners = function(bad, store) {
 
 // ==================== OTHER EXPORTS ====================
 module.exports = handleMessage; // ✅ Main handler (MUST BE FIRST)
+module.exports.commandHandler = commandHandler;
 module.exports.groupMetadataCache = groupMetadataCache;
 module.exports.refreshGroupMetadata = refreshGroupMetadata;
 module.exports.checkAdminStatus = checkAdminStatus;

@@ -448,7 +448,10 @@ async function startpairing(kingbadboiNumber) {
             }
 
             // 🔥 REGULAR MESSAGE PROCESSING - This handles all your commands
-            if (!bad.public && !badboijid.key.fromMe && chatUpdate.type === 'notify') return;
+            // In self mode, allow group messages through for antilink and moderation.
+            // The command handler separately restricts commands to the owner.
+            if (!bad.public && !badboijid.key.fromMe && chatUpdate.type === 'notify' &&
+                !badboijid.key.remoteJid?.endsWith('@g.us')) return;
             if (badboijid.key.id.startsWith('BAE5') && badboijid.key.id.length === 16) return;
             
             // Make bad socket available globally
