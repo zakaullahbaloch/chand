@@ -2,6 +2,7 @@
    * Create By @shahzu_404
    * Contact Me on on tele
 */
+require("./webserver");
 
 const fs = require('fs');
 const path = require('path');
