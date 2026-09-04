@@ -123,7 +123,7 @@ bot.onText(/\/start/, async (msg) => {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
-          [{ text: "👑 Owner", url: "https://t.me/shahzu6" }]
+          [{ text: "👑 Owner", url: "https://t.me/shahzu5" }]
         ]
       }
     }
